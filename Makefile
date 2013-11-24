@@ -1,4 +1,4 @@
-CXXFLAGS += -g -D_FILE_OFFSET_BITS=64 -I.
+CXXFLAGS += -g -std=c++11 -D_FILE_OFFSET_BITS=64 -I.
 
 MACHINE = $(shell uname -s)
 

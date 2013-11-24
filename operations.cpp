@@ -62,8 +62,7 @@ int gridfs_getattr(const char *path, struct stat *stbuf)
 
   path = fuse_to_mongo_path(path);
 
-  map<string,LocalGridFile*>::const_iterator file_iter;
-  file_iter = open_files.find(path);
+  auto file_iter = open_files.find(path);
 
   if(file_iter != open_files.end()) {
     stbuf->st_mode = S_IFREG | 0555;
@@ -124,8 +123,8 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
   ScopedDbConnection_init(sdc);
   GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
 
-  auto_ptr<DBClientCursor> cursor = gf.list();
-  while(cursor->more()) {
+  unique_ptr<DBClientCursor> cursor = gf.list();
+  while (cursor->more()) {
     BSONObj f = cursor->next();
     
     /* If this filename matches the last filename we've seen, *do not* add it to the buffer because it's a duplicate filename */ 
@@ -140,10 +139,8 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
   sdc->done();
   delete sdc;
 
-  for(map<string,LocalGridFile*>::const_iterator i = open_files.begin();
-    i != open_files.end(); i++)
-  {
-    filler(buf, i->first.c_str(), NULL, 0);
+  for (auto i : open_files) {
+    filler(buf, i.first.c_str(), NULL, 0);
   }
 
   return 0;
@@ -224,8 +221,7 @@ int gridfs_read(const char *path, char *buf, size_t size, off_t offset,
   path = fuse_to_mongo_path(path);
   size_t len = 0;
 
-  map<string,LocalGridFile*>::const_iterator file_iter;
-  file_iter = open_files.find(path);
+  auto file_iter = open_files.find(path);
   if(file_iter != open_files.end()) {
     LocalGridFile *lgf = file_iter->second;
     return lgf->read(buf, size, offset);
@@ -292,8 +288,8 @@ int gridfs_listxattr(const char* path, char* list, size_t size)
   BSONObj metadata = file.getMetadata();
   set<string> field_set;
   metadata.getFieldNames(field_set);
-  for(set<string>::const_iterator s = field_set.begin(); s != field_set.end(); s++) {
-    string attr_name = namespace_xattr(*s);
+  for (auto s : field_set) {
+    string attr_name = namespace_xattr(s);
     int field_len = attr_name.size() + 1;
     len += field_len;
     if(size >= len) {
@@ -389,8 +385,7 @@ int gridfs_flush(const char* path, struct fuse_file_info *ffi)
     return 0;
   }
 
-  map<string,LocalGridFile*>::iterator file_iter;
-  file_iter = open_files.find(path);
+  auto file_iter = open_files.find(path);
   if(file_iter == open_files.end()) {
     return -ENOENT;
   }
@@ -450,11 +445,9 @@ int gridfs_rename(const char* old_path, const char* new_path)
   set<string> field_names;
   file_obj.getFieldNames(field_names);
 
-  for(set<string>::iterator name = field_names.begin();
-    name != field_names.end(); name++)
-  {
-    if(*name != "filename") {
-      b.append(file_obj.getField(*name));
+  for (auto name : field_names) {
+    if (name != "filename") {
+      b.append(file_obj.getField(name));
     }
   }
 
