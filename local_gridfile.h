@@ -19,9 +19,8 @@ public:
     }
 
   ~LocalGridFile() {
-    for(std::vector<char*>::iterator i = _chunks.begin();
-      i != _chunks.end(); i++) {
-      delete *i;
+    for (auto i : _chunks) {
+      delete i;
     }
   }
 
