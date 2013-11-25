@@ -50,7 +50,7 @@ inline time_t mongo_time_to_unix_time(unsigned long long mtime) {
   return mtime / 1000;
 }
 
-inline time_t unix_time_to_mongo_time(unsigned long long utime) {
+inline unsigned long long unix_time_to_mongo_time(time_t utime) {
   return utime * 1000;
 }
 
