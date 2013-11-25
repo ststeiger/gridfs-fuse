@@ -12,11 +12,11 @@
 const unsigned int DEFAULT_CHUNK_SIZE = 256 * 1024;
 
 class LocalGridFile {
-public:
+ public:
   LocalGridFile(int chunkSize = DEFAULT_CHUNK_SIZE) :
-  _chunkSize(chunkSize), _length(0), _dirty(true) {
-      _chunks.push_back(new char[_chunkSize]);
-    }
+    _chunkSize(chunkSize), _length(0), _dirty(true) {
+    _chunks.push_back(new char[_chunkSize]);
+  }
 
   ~LocalGridFile() {
     for (auto i : _chunks) {
@@ -33,6 +33,8 @@ public:
 
   int write(const char* buf, size_t nbyte, off_t offset);
   int read(char* buf, size_t size, off_t offset);
+
+  typedef std::shared_ptr<LocalGridFile> ptr;
 
 private:
   int _chunkSize, _length;

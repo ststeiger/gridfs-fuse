@@ -37,7 +37,7 @@
 using namespace std;
 using namespace mongo;
 
-std::map<string, LocalGridFile*> open_files;
+std::map<string, LocalGridFile::ptr> open_files;
 
 unsigned int FH = 1;
 
@@ -168,7 +168,7 @@ int gridfs_open(const char *path, struct fuse_file_info *fi) {
 
 int gridfs_create(const char* path, mode_t mode, struct fuse_file_info* ffi) {
   path = fuse_to_mongo_path(path);
-  open_files[path] = new LocalGridFile(DEFAULT_CHUNK_SIZE);
+  open_files[path] = std::make_shared<LocalGridFile>();
 
   ffi->fh = FH++;
 
@@ -183,7 +183,6 @@ int gridfs_release(const char* path, struct fuse_file_info* ffi) {
     return 0;
 
   path = fuse_to_mongo_path(path);
-  delete open_files[path];
   open_files.erase(path);
 
   return 0;
@@ -203,7 +202,7 @@ int gridfs_read(const char *path, char *buf, size_t size, off_t offset, struct f
   path = fuse_to_mongo_path(path);
   auto file_iter = open_files.find(path);
   if (file_iter != open_files.end()) {
-    LocalGridFile *lgf = file_iter->second;
+    LocalGridFile::ptr lgf = file_iter->second;
     return lgf->read(buf, size, offset);
   }
 
@@ -323,7 +322,7 @@ int gridfs_write(const char* path, const char* buf, size_t nbyte, off_t offset, 
   if (open_files.find(path) == open_files.end())
     return -ENOENT;
 
-  LocalGridFile *lgf = open_files[path];
+  LocalGridFile::ptr lgf = open_files[path];
 
   return lgf->write(buf, nbyte, offset);
 }
@@ -337,7 +336,7 @@ int gridfs_flush(const char* path, struct fuse_file_info *ffi) {
   if (file_iter == open_files.end())
     return -ENOENT;
 
-  LocalGridFile *lgf = file_iter->second;
+  LocalGridFile::ptr lgf = file_iter->second;
 
   if (!lgf->dirty())
     return 0;
