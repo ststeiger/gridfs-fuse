@@ -24,7 +24,10 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <memory>
+#include <pwd.h>
+#include <grp.h>
 
+#include <mongo/bson/bson.h>
 #include <mongo/client/gridfs.h>
 #include <mongo/client/connpool.h>
 #include <mongo/client/dbclient.h>
@@ -74,11 +77,14 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   auto file_iter = open_files.find(path);
 
   if (file_iter != open_files.end()) {
-    stbuf->st_mode = S_IFREG | 0555;
+    LocalGridFile::ptr lgf = file_iter->second;
+    stbuf->st_mode = S_IFREG | (lgf->Mode() & (0xffff ^ S_IFMT));
     stbuf->st_nlink = 1;
+    stbuf->st_uid = lgf->Uid();
+    stbuf->st_gid = lgf->Gid();
     stbuf->st_ctime = time(NULL);
     stbuf->st_mtime = time(NULL);
-    stbuf->st_size = file_iter->second->getLength();
+    stbuf->st_size = lgf->Length();
     return 0;
   }
 
@@ -95,17 +101,28 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   }*/
 
   auto sdc = make_ScopedDbConnection();
-  GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
-  GridFile file = gf.findFile(path);
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  BSONObj file_obj = sdc->conn().findOne(db_name + ".files",
+				    BSON("filename" << path));
 
-  if (!file.exists())
+  if (file_obj.isEmpty())
     return -ENOENT;
 
-  stbuf->st_mode = S_IFREG | 0555;
+  stbuf->st_mode = S_IFREG | (file_obj["mode"].Int() & (0xffff ^ S_IFMT));
   stbuf->st_nlink = 1;
-  stbuf->st_size = file.getContentLength();
+  if (!file_obj["owner"].eoo()) {
+    passwd *pw = getpwnam(file_obj["owner"].str().c_str());
+    if (pw)
+      stbuf->st_uid = pw->pw_uid;
+  }
+  if (!file_obj["group"].eoo()) {
+    group *gr = getgrnam(file_obj["group"].str().c_str());
+    if (gr)
+      stbuf->st_gid = gr->gr_gid;
+  }
+  stbuf->st_size = file_obj["length"].Int();
 
-  time_t upload_time = mongo_time_to_unix_time(file.getUploadDate());
+  time_t upload_time = mongo_time_to_unix_time(file_obj["uploadDate"].date());
   stbuf->st_ctime = upload_time;
   stbuf->st_mtime = upload_time;
 
@@ -146,6 +163,74 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
   return 0;
 }
 
+int gridfs_chmod(const char* path, mode_t mode) {
+  path = fuse_to_mongo_path(path);
+  auto file_iter = open_files.find(path);
+
+  if (file_iter != open_files.end()) {
+    LocalGridFile::ptr lgf = file_iter->second;
+    lgf->setMode(mode);
+  }
+
+  auto sdc = make_ScopedDbConnection();
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  sdc->conn().update(db_name + ".files",
+		     BSON("filename" << path),
+		     BSON("$set" << BSON("mode" << mode)));
+
+  return 0;
+}
+
+int gridfs_chown(const char* path, uid_t uid, gid_t gid) {
+  path = fuse_to_mongo_path(path);
+  auto file_iter = open_files.find(path);
+
+  if (file_iter != open_files.end()) {
+    LocalGridFile::ptr lgf = file_iter->second;
+    lgf->setUid(uid);
+    lgf->setGid(gid);
+  }
+
+  mongo::BSONObjBuilder b;
+
+  {
+    passwd *pw = getpwuid(uid);
+    if (pw)
+      b.append("owner", pw->pw_name);
+  }
+  {
+    group *gr = getgrgid(gid);
+    if (gr)
+      b.append("group", gr->gr_name);
+  }
+
+  if (b.hasField("owner") || b.hasField("group")) {
+    auto sdc = make_ScopedDbConnection();
+    string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+    sdc->conn().update(db_name + ".files",
+		       BSON("filename" << path),
+		       BSON("$set" << b.obj()));
+  }
+
+  return 0;
+}
+
+int gridfs_utimens(const char* path, const struct timespec tv[2]) {
+  path = fuse_to_mongo_path(path);
+
+  unsigned long long millis = ((unsigned long long)tv[1].tv_sec * 1000) + (tv[1].tv_nsec / 1e+6);
+
+  auto sdc = make_ScopedDbConnection();
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  sdc->conn().update(db_name + ".files",
+		     BSON("filename" << path),
+		     BSON("$set" <<
+			  BSON("uploadDate" << Date_t(millis))
+			  ));
+
+  return 0;
+}
+
 int gridfs_open(const char *path, struct fuse_file_info *fi) {
   if ((fi->flags & O_ACCMODE) != O_RDONLY)
     return -EACCES;
@@ -166,8 +251,9 @@ int gridfs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 int gridfs_create(const char* path, mode_t mode, struct fuse_file_info* ffi) {
+  fuse_context *context = fuse_get_context();
   path = fuse_to_mongo_path(path);
-  open_files[path] = std::make_shared<LocalGridFile>();
+  open_files[path] = std::make_shared<LocalGridFile>(context->uid, context->gid, mode);
 
   ffi->fh = FH++;
 
@@ -396,7 +482,7 @@ int gridfs_flush(const char* path, struct fuse_file_info *ffi) {
 
   LocalGridFile::ptr lgf = file_iter->second;
 
-  if (!lgf->dirty())
+  if (lgf->is_clean())
     return 0;
 
   auto sdc = make_ScopedDbConnection();
@@ -405,13 +491,31 @@ int gridfs_flush(const char* path, struct fuse_file_info *ffi) {
   if (gf.findFile(path).exists())
     gf.removeFile(path);
 
-  size_t len = lgf->getLength();
+  size_t len = lgf->Length();
   char *buf = new char[len];
   lgf->read(buf, len, 0);
 
-  gf.storeFile(buf, len, path);
+  BSONObj file_obj = gf.storeFile(buf, len, path);
 
-  lgf->flushed();
+  mongo::BSONObjBuilder b;
+  {
+    passwd *pw = getpwuid(lgf->Uid());
+    if (pw)
+      b.append("owner", pw->pw_name);
+  }
+  {
+    group *gr = getgrgid(lgf->Gid());
+    if (gr)
+      b.append("group", gr->gr_name);
+  }
+  b.append("mode", lgf->Mode());
+
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  sdc->conn().update(db_name + ".files",
+		     BSON("filename" << path),
+		     BSON("$set" << b.obj()));
+
+  lgf->set_flushed();
 
   return 0;
 }

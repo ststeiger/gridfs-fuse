@@ -32,6 +32,9 @@ int main(int argc, char *argv[])
   static struct fuse_operations gridfs_oper;
   gridfs_oper.getattr = gridfs_getattr;
   gridfs_oper.readdir = gridfs_readdir;
+  gridfs_oper.chmod = gridfs_chmod;
+  gridfs_oper.chown = gridfs_chown;
+  gridfs_oper.utimens = gridfs_utimens;
   gridfs_oper.open = gridfs_open;
   gridfs_oper.create = gridfs_create;
   gridfs_oper.release = gridfs_release;

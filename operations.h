@@ -33,6 +33,12 @@ int gridfs_getattr(const char *path, struct stat *stbuf);
 int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
            off_t offset, struct fuse_file_info *fi);
 
+int gridfs_chmod(const char* path, mode_t mode);
+
+int gridfs_chown(const char* path, uid_t uid, gid_t gid);
+
+int gridfs_utimens(const char* path, const struct timespec tv[2]);
+
 int gridfs_open(const char *path, struct fuse_file_info *fi);
 
 int gridfs_create(const char* path, mode_t mode, struct fuse_file_info* ffi);
