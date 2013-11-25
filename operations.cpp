@@ -72,7 +72,6 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   }
 
   path = fuse_to_mongo_path(path);
-
   auto file_iter = open_files.find(path);
 
   if (file_iter != open_files.end()) {
@@ -85,9 +84,8 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   }
 
   // HACK: This is a protective measure to ensure we don't spin off into forever if a path without a period is requested.
-  if (path_depth(path) > 10) {
+  if (path_depth(path) > 10)
     return -ENOENT;
-  }
 
   // HACK: Assumes that if the last part of the path has a '.' in it, it's the leaf of the path, and if we haven't found a match by now,
   // give up and go home. This works just dandy as long as you avoid putting periods in your 'directory' names.
@@ -150,30 +148,26 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
 }
 
 int gridfs_open(const char *path, struct fuse_file_info *fi) {
-  path = fuse_to_mongo_path(path);
-
-  if ((fi->flags & O_ACCMODE) == O_RDONLY) {
-    if (open_files.find(path) != open_files.end())
-      return 0;
-
-    auto sdc = make_ScopedDbConnection();
-    GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
-
-    GridFile file = gf.findFile(path);
-
-    if (file.exists()) {
-      return 0;
-    }
-
-    return -ENOENT;
-  } else {
+  if ((fi->flags & O_ACCMODE) != O_RDONLY)
     return -EACCES;
-  }
+
+  path = fuse_to_mongo_path(path);
+  if (open_files.find(path) != open_files.end())
+    return 0;
+
+  auto sdc = make_ScopedDbConnection();
+  GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
+
+  GridFile file = gf.findFile(path);
+
+  if (!file.exists())
+    return -ENOENT;
+
+  return 0;
 }
 
 int gridfs_create(const char* path, mode_t mode, struct fuse_file_info* ffi) {
   path = fuse_to_mongo_path(path);
-
   open_files[path] = new LocalGridFile(DEFAULT_CHUNK_SIZE);
 
   ffi->fh = FH++;
@@ -182,15 +176,13 @@ int gridfs_create(const char* path, mode_t mode, struct fuse_file_info* ffi) {
 }
 
 int gridfs_release(const char* path, struct fuse_file_info* ffi) {
-  path = fuse_to_mongo_path(path);
-
-  if (!ffi->fh) {
-    // fh is not set if file is opened read only
-    // Would check ffi->flags for O_RDONLY instead but MacFuse doesn't
-    // seem to properly pass flags into release
+  // fh is not set if file is opened read only
+  // Would check ffi->flags for O_RDONLY instead but MacFuse doesn't
+  // seem to properly pass flags into release
+  if (!ffi->fh)
     return 0;
-  }
 
+  path = fuse_to_mongo_path(path);
   delete open_files[path];
   open_files.erase(path);
 
@@ -198,11 +190,10 @@ int gridfs_release(const char* path, struct fuse_file_info* ffi) {
 }
 
 int gridfs_unlink(const char* path) {
-  path = fuse_to_mongo_path(path);
-
   auto sdc = make_ScopedDbConnection();
   GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
 
+  path = fuse_to_mongo_path(path);
   gf.removeFile(path);
 
   return 0;
@@ -210,8 +201,6 @@ int gridfs_unlink(const char* path) {
 
 int gridfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
   path = fuse_to_mongo_path(path);
-  size_t len = 0;
-
   auto file_iter = open_files.find(path);
   if (file_iter != open_files.end()) {
     LocalGridFile *lgf = file_iter->second;
@@ -228,6 +217,7 @@ int gridfs_read(const char *path, char *buf, size_t size, off_t offset, struct f
   int chunk_size = file.getChunkSize();
   int chunk_num = offset / chunk_size;
 
+  size_t len = 0;
   while (len < size && chunk_num < file.getNumChunks()) {
     GridFSChunk chunk = file.getChunk(chunk_num);
     int to_read;
@@ -252,10 +242,8 @@ int gridfs_read(const char *path, char *buf, size_t size, off_t offset, struct f
 
 int gridfs_listxattr(const char* path, char* list, size_t size) {
   path = fuse_to_mongo_path(path);
-
-  if (open_files.find(path) != open_files.end()) {
+  if (open_files.find(path) != open_files.end())
     return 0;
-  }
 
   auto sdc = make_ScopedDbConnection();
   GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
@@ -272,7 +260,7 @@ int gridfs_listxattr(const char* path, char* list, size_t size) {
     string attr_name = namespace_xattr(s);
     int field_len = attr_name.size() + 1;
     len += field_len;
-    if (size >= len) {
+    if (len < size) {
       memcpy(list, attr_name.c_str(), field_len);
       list += field_len;
     }
@@ -280,26 +268,23 @@ int gridfs_listxattr(const char* path, char* list, size_t size) {
 
   if (size == 0)
     return len;
-  if (size < len)
+  if (len >= size)
     return -ERANGE;
 
   return len;
 }
 
 int gridfs_getxattr(const char* path, const char* name, char* value, size_t size) {
-  if (strcmp(path, "/") == 0) {
+  if (strcmp(path, "/") == 0)
     return -ENOATTR;
-  }
+
+  const char* attr_name = unnamespace_xattr(name);
+  if (!attr_name)
+    return -ENOATTR;
 
   path = fuse_to_mongo_path(path);
-  const char* attr_name = unnamespace_xattr(name);
-  if (!attr_name) {
+  if (open_files.find(path) != open_files.end())
     return -ENOATTR;
-  }
-
-  if (open_files.find(path) != open_files.end()) {
-    return -ENOATTR;
-  }
 
   auto sdc = make_ScopedDbConnection();
   GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
@@ -320,7 +305,7 @@ int gridfs_getxattr(const char* path, const char* name, char* value, size_t size
   int len = field_str.size() + 1;
   if (size == 0)
     return len;
-  if (size < len)
+  if (len >= size)
     return -ERANGE;
 
   memcpy(value, field_str.c_str(), len);
@@ -329,15 +314,14 @@ int gridfs_getxattr(const char* path, const char* name, char* value, size_t size
 }
 
 int gridfs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags) {
+  // TODO
   return -ENOTSUP;
 }
 
 int gridfs_write(const char* path, const char* buf, size_t nbyte, off_t offset, struct fuse_file_info* ffi) {
   path = fuse_to_mongo_path(path);
-
-  if (open_files.find(path) == open_files.end()) {
+  if (open_files.find(path) == open_files.end())
     return -ENOENT;
-  }
 
   LocalGridFile *lgf = open_files[path];
 
@@ -345,29 +329,24 @@ int gridfs_write(const char* path, const char* buf, size_t nbyte, off_t offset, 
 }
 
 int gridfs_flush(const char* path, struct fuse_file_info *ffi) {
-  path = fuse_to_mongo_path(path);
-
-  if (!ffi->fh) {
+  if (!ffi->fh)
     return 0;
-  }
 
+  path = fuse_to_mongo_path(path);
   auto file_iter = open_files.find(path);
-  if (file_iter == open_files.end()) {
+  if (file_iter == open_files.end())
     return -ENOENT;
-  }
 
   LocalGridFile *lgf = file_iter->second;
 
-  if (!lgf->dirty()) {
+  if (!lgf->dirty())
     return 0;
-  }
 
   auto sdc = make_ScopedDbConnection();
   GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
 
-  if (gf.findFile(path).exists()) {
+  if (gf.findFile(path).exists())
     gf.removeFile(path);
-  }
 
   size_t len = lgf->getLength();
   char *buf = new char[len];
@@ -396,11 +375,10 @@ int gridfs_rename(const char* old_path, const char* new_path) {
   db_name += gridfs_options.prefix;
 
   BSONObj file_obj = client.findOne(db_name + ".files",
-                    BSON("filename" << old_path));
+				    BSON("filename" << old_path));
 
-  if (file_obj.isEmpty()) {
+  if (file_obj.isEmpty())
     return -ENOENT;
-  }
 
   BSONObjBuilder b;
   set<string> field_names;
@@ -415,11 +393,13 @@ int gridfs_rename(const char* old_path, const char* new_path) {
   b << "filename" << new_path;
 
   client.update(db_name + ".files",
-          BSON("_id" << file_obj.getField("_id")), b.obj());
+		BSON("_id" << file_obj.getField("_id")),
+		b.obj());
 
   return 0;
 }
 
 int gridfs_mknod(const char *path, mode_t mode, dev_t rdev) {
+  // POSIX TODO
   fprintf(stderr, "MKNOD: %s\n", path); 
 }

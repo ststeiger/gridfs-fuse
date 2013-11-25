@@ -22,13 +22,10 @@
 #include <string>
 #include <cstring>
 
-inline const char* fuse_to_mongo_path(const char* path)
-{
-  if(path[0] == '/') {
+inline const char* fuse_to_mongo_path(const char* path) {
+  if (path[0] == '/')
     return path + 1;
-  } else {
-    return path;
-  }
+  return path;
 }
 
 inline const bool is_leaf(const char* path) {
@@ -49,23 +46,19 @@ inline const int path_depth(const char* path) {
   return sc;
 }
 
-inline time_t mongo_time_to_unix_time(unsigned long long mtime)
-{
+inline time_t mongo_time_to_unix_time(unsigned long long mtime) {
   return mtime / 1000;
 }
 
-inline time_t unix_time_to_mongo_time(unsigned long long utime)
-{
+inline time_t unix_time_to_mongo_time(unsigned long long utime) {
   return utime * 1000;
 }
 
-inline time_t mongo_time()
-{
+inline time_t mongo_time() {
   return unix_time_to_mongo_time(time(NULL));
 }
 
-inline std::string namespace_xattr(const std::string name)
-{
+inline std::string namespace_xattr(const std::string name) {
 #ifdef __linux__
   return "user." + name;
 #else
