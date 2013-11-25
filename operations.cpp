@@ -334,41 +334,11 @@ int gridfs_setxattr(const char* path, const char* name, const char* value, size_
   if (file_obj.isEmpty())
     return -ENOENT;
 
-  BSONObjBuilder file_builder;
-  set<string> field_names;
-  file_obj.getFieldNames(field_names);
-
-  // Copy all fields except 'metadata'
-  for (auto name : field_names) {
-    if (name != "metadata")
-      file_builder.append(file_obj.getField(name));
-  }
-
-  // Build our own metadata
-  {
-    BSONObjBuilder metadata_builder;
-    BSONElement m = file_obj.getField("metadata");
-    if (!m.eoo()) {
-      BSONObj metadata = m.Obj();
-      set<string> metadata_names;
-      metadata.getFieldNames(metadata_names);
-
-      // Copy all except the key we want to set/replace
-      for (auto metadata_name : metadata_names) {
-	if (metadata_name != attr_name)
-	  metadata_builder.append(metadata.getField(metadata_name));
-      }
-    }
-    // Add our key
-    metadata_builder.append(attr_name, value);
-
-    // Add all of the metadata
-    file_builder.append("metadata", metadata_builder.obj());
-  }
-
   client.update(db_name + ".files",
-		BSON("_id" << file_obj.getField("_id")),
-		file_builder.obj());
+		BSON("filename" << path),
+		BSON("$set" <<
+		     BSON((string("metadata.") + attr_name) << value)
+		     ));
 
   return 0;
 }
@@ -396,38 +366,11 @@ int gridfs_removexattr(const char* path, const char* name) {
   if (file_obj.isEmpty())
     return -ENOENT;
 
-  BSONObjBuilder file_builder;
-  set<string> field_names;
-  file_obj.getFieldNames(field_names);
-
-  // Copy all fields except 'metadata'
-  for (auto name : field_names) {
-    if (name != "metadata")
-      file_builder.append(file_obj.getField(name));
-  }
-
-  // Build our own metadata
-  {
-    BSONObjBuilder metadata_builder;
-    BSONElement m = file_obj.getField("metadata");
-    if (!m.eoo()) {
-      BSONObj metadata = m.Obj();
-      set<string> metadata_names;
-      metadata.getFieldNames(metadata_names);
-
-      // Copy all except the key we want to remove
-      for (auto metadata_name : metadata_names) {
-	if (metadata_name != attr_name)
-	  metadata_builder.append(metadata.getField(metadata_name));
-      }
-    }
-    // Add all of the metadata
-    file_builder.append("metadata", metadata_builder.obj());
-  }
-
   client.update(db_name + ".files",
-		BSON("_id" << file_obj.getField("_id")),
-		file_builder.obj());
+		BSON("filename" << path),
+		BSON("$unset" <<
+		     BSON((string("metadata.") + attr_name) << "")
+		     ));
 
   return 0;
 }
