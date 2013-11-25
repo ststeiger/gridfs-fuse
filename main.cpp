@@ -40,39 +40,41 @@ int main(int argc, char *argv[])
   gridfs_oper.listxattr = gridfs_listxattr;
   gridfs_oper.getxattr = gridfs_getxattr;
   gridfs_oper.setxattr = gridfs_setxattr;
+  gridfs_oper.removexattr = gridfs_removexattr;
   gridfs_oper.write = gridfs_write;
   gridfs_oper.flush = gridfs_flush;
   gridfs_oper.rename = gridfs_rename;
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-  mongo::ConnectionString cs;
 
   memset(&gridfs_options, 0, sizeof(struct gridfs_options));
-  if(fuse_opt_parse(&args, &gridfs_options, gridfs_opts,
-            gridfs_opt_proc) == -1)
-  {
+  if (fuse_opt_parse(&args, &gridfs_options, gridfs_opts, gridfs_opt_proc) == -1)
     return -1;
-  }
 
-  if(!gridfs_options.host) {
+  if (!gridfs_options.host) {
     gridfs_options.host = "localhost";
   }
-  if(!gridfs_options.port) {
+
+  mongo::ConnectionString cs;
+  if (!gridfs_options.port) {
     gridfs_options.port = 0;
   } else {
     cs = mongo::ConnectionString(mongo::HostAndPort(gridfs_options.host, gridfs_options.port));
     gridfs_options.conn_string = &cs;
   }
-  if(!gridfs_options.db) {
+
+  if (!gridfs_options.db) {
     gridfs_options.db = "test";
   }
-  if(gridfs_options.username && !gridfs_options.password) {
+
+  if (gridfs_options.username && !gridfs_options.password) {
     cout << "Password:";
     char buffer[255];
     cin.getline(buffer, sizeof(buffer));
     cout << buffer;
     gridfs_options.password = buffer;
   }
+
   if (!gridfs_options.prefix) {
     gridfs_options.prefix = "fs";
   }

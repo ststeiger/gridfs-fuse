@@ -131,7 +131,7 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
     BSONObj f = cursor->next();
 
     /* If this filename matches the last filename we've seen, *do not* add it to the buffer because it's a duplicate filename */ 
-    if (lastFN!=f.getStringField("filename")) {
+    if (lastFN != f.getStringField("filename")) {
       filler(buf, f.getStringField("filename") , NULL , 0);
     }
 
@@ -275,11 +275,11 @@ int gridfs_listxattr(const char* path, char* list, size_t size) {
 
 int gridfs_getxattr(const char* path, const char* name, char* value, size_t size) {
   if (strcmp(path, "/") == 0)
-    return -ENOATTR;
+    return -ENODATA;
 
   const char* attr_name = unnamespace_xattr(name);
   if (!attr_name)
-    return -ENOATTR;
+    return -ENODATA;
 
   path = fuse_to_mongo_path(path);
   if (open_files.find(path) != open_files.end())
@@ -313,8 +313,124 @@ int gridfs_getxattr(const char* path, const char* name, char* value, size_t size
 }
 
 int gridfs_setxattr(const char* path, const char* name, const char* value, size_t size, int flags) {
-  // TODO
-  return -ENOTSUP;
+  if (strcmp(path, "/") == 0)
+    return -ENODATA;
+
+  const char* attr_name = unnamespace_xattr(name);
+  if (!attr_name)
+    return -ENODATA;
+
+  path = fuse_to_mongo_path(path);
+  if (open_files.find(path) != open_files.end())
+    return -ENOATTR;
+
+  auto sdc = make_ScopedDbConnection();
+  GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
+  DBClientBase &client = sdc->conn();
+
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  BSONObj file_obj = client.findOne(db_name + ".files",
+				    BSON("filename" << path));
+
+  if (file_obj.isEmpty())
+    return -ENOENT;
+
+  BSONObjBuilder file_builder;
+  set<string> field_names;
+  file_obj.getFieldNames(field_names);
+
+  // Copy all fields except 'metadata'
+  for (auto name : field_names) {
+    if (name != "metadata")
+      file_builder.append(file_obj.getField(name));
+  }
+
+  // Build our own metadata
+  {
+    BSONObjBuilder metadata_builder;
+    BSONElement m = file_obj.getField("metadata");
+    if (!m.eoo()) {
+      BSONObj metadata = m.Obj();
+      set<string> metadata_names;
+      metadata.getFieldNames(metadata_names);
+
+      // Copy all except the key we want to set/replace
+      for (auto metadata_name : metadata_names) {
+	if (metadata_name != attr_name)
+	  metadata_builder.append(metadata.getField(metadata_name));
+      }
+    }
+    // Add our key
+    metadata_builder.append(attr_name, value);
+
+    // Add all of the metadata
+    file_builder.append("metadata", metadata_builder.obj());
+  }
+
+  client.update(db_name + ".files",
+		BSON("_id" << file_obj.getField("_id")),
+		file_builder.obj());
+
+  return 0;
+}
+
+int gridfs_removexattr(const char* path, const char* name) {
+  if (strcmp(path, "/") == 0)
+    return -ENODATA;
+
+  const char* attr_name = unnamespace_xattr(name);
+  if (!attr_name)
+    return -ENODATA;
+
+  path = fuse_to_mongo_path(path);
+  if (open_files.find(path) != open_files.end())
+    return -ENOATTR;
+
+  auto sdc = make_ScopedDbConnection();
+  GridFS gf(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
+  DBClientBase &client = sdc->conn();
+
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
+  BSONObj file_obj = client.findOne(db_name + ".files",
+				    BSON("filename" << path));
+
+  if (file_obj.isEmpty())
+    return -ENOENT;
+
+  BSONObjBuilder file_builder;
+  set<string> field_names;
+  file_obj.getFieldNames(field_names);
+
+  // Copy all fields except 'metadata'
+  for (auto name : field_names) {
+    if (name != "metadata")
+      file_builder.append(file_obj.getField(name));
+  }
+
+  // Build our own metadata
+  {
+    BSONObjBuilder metadata_builder;
+    BSONElement m = file_obj.getField("metadata");
+    if (!m.eoo()) {
+      BSONObj metadata = m.Obj();
+      set<string> metadata_names;
+      metadata.getFieldNames(metadata_names);
+
+      // Copy all except the key we want to remove
+      for (auto metadata_name : metadata_names) {
+	if (metadata_name != attr_name)
+	  metadata_builder.append(metadata.getField(metadata_name));
+      }
+    }
+    // Add all of the metadata
+    file_builder.append("metadata", metadata_builder.obj());
+  }
+
+  client.update(db_name + ".files",
+		BSON("_id" << file_obj.getField("_id")),
+		file_builder.obj());
+
+  return 0;
 }
 
 int gridfs_write(const char* path, const char* buf, size_t nbyte, off_t offset, struct fuse_file_info* ffi) {
@@ -363,16 +479,9 @@ int gridfs_rename(const char* old_path, const char* new_path) {
   new_path = fuse_to_mongo_path(new_path);
 
   auto sdc = ScopedDbConnection::getScopedDbConnection(*gridfs_options.conn_string);
-  bool digest = true;
-  string err = "";
-  sdc->conn().DBClientWithCommands::auth(gridfs_options.db, gridfs_options.username, gridfs_options.password, err, digest);
-  fprintf(stderr, "DEBUG: %s\n", err.c_str());
   DBClientBase &client = sdc->conn();
 
-  string db_name = gridfs_options.db;
-  db_name += ".";
-  db_name += gridfs_options.prefix;
-
+  string db_name = string(gridfs_options.db) + "." + gridfs_options.prefix;
   BSONObj file_obj = client.findOne(db_name + ".files",
 				    BSON("filename" << old_path));
 

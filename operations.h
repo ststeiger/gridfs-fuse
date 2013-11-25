@@ -51,6 +51,8 @@ int gridfs_getxattr(const char* path, const char* name, char* value, size_t size
 int gridfs_setxattr(const char* path, const char* name, const char* value,
           size_t size, int flags);
 
+int gridfs_removexattr(const char* path, const char* name);
+
 int gridfs_write(const char* path, const char* buf, size_t nbyte,
          off_t offset, struct fuse_file_info* ffi);
 
