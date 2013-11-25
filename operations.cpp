@@ -62,7 +62,6 @@ std::shared_ptr<ScopedDbConnection> make_ScopedDbConnection(void) {
 }
 
 int gridfs_getattr(const char *path, struct stat *stbuf) {
-  int res = 0;
   memset(stbuf, 0, sizeof(struct stat));
 
   if (strcmp(path, "/") == 0) {
@@ -251,7 +250,7 @@ int gridfs_listxattr(const char* path, char* list, size_t size) {
   if (!file.exists())
     return -ENOENT;
 
-  int len = 0;
+  size_t len = 0;
   BSONObj metadata = file.getMetadata();
   set<string> field_set;
   metadata.getFieldNames(field_set);
@@ -301,7 +300,7 @@ int gridfs_getxattr(const char* path, const char* name, char* value, size_t size
     return -ENOATTR;
 
   string field_str = field.toString();
-  int len = field_str.size() + 1;
+  size_t len = field_str.size() + 1;
   if (size == 0)
     return len;
   if (len >= size)
@@ -510,4 +509,5 @@ int gridfs_rename(const char* old_path, const char* new_path) {
 int gridfs_mknod(const char *path, mode_t mode, dev_t rdev) {
   // POSIX TODO
   fprintf(stderr, "MKNOD: %s\n", path); 
+  return 0;
 }

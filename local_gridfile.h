@@ -15,7 +15,7 @@ const unsigned int DEFAULT_CHUNK_SIZE = 256 * 1024;
 class LocalGridFile {
  public:
   LocalGridFile(int chunkSize = DEFAULT_CHUNK_SIZE) :
-    _chunkSize(chunkSize), _length(0), _dirty(true) {
+    _length(0), _chunkSize(chunkSize), _dirty(true) {
     _chunks.push_back(new char[_chunkSize]);
   }
 
@@ -38,7 +38,7 @@ class LocalGridFile {
   typedef std::shared_ptr<LocalGridFile> ptr;
 
 private:
-  int _chunkSize, _length;
+  size_t _length, _chunkSize;
   bool _dirty;
   std::vector<char*> _chunks;
 };

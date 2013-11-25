@@ -31,17 +31,17 @@ inline const char* fuse_to_mongo_path(const char* path) {
 inline const bool is_leaf(const char* path) {
   int pp = -1;
   int sp = -1;
-  for(int i=0; i<strlen(path); i++) {
-    if(path[i] == '/') sp = i;
-    if(path[i] == '.') pp = i;
+  for (size_t i = 0; i < strlen(path); i++) {
+    if (path[i] == '/') sp = i;
+    if (path[i] == '.') pp = i;
   }
   return pp > sp;
 }
 
 inline const int path_depth(const char* path) {
   int sc = 0;
-  for(int i=0; i<strlen(path); i++) {
-    if(path[i] == '/') sc++;
+  for (size_t i=0; i < strlen(path); i++) {
+    if (path[i] == '/') sc++;
   }
   return sc;
 }

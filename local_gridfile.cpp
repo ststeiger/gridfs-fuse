@@ -6,8 +6,8 @@ using namespace std;
 
 int LocalGridFile::write(const char *buf, size_t nbyte, off_t offset)
 {
-    int last_chunk = (offset + nbyte) / _chunkSize;
-    int written = 0;
+    size_t last_chunk = (offset + nbyte) / _chunkSize;
+    size_t written = 0;
 
     while(last_chunk > _chunks.size() - 1) {
         char *new_buf = new char[_chunkSize];
@@ -37,7 +37,7 @@ int LocalGridFile::write(const char *buf, size_t nbyte, off_t offset)
         chunk_num++;
     }
 
-    _length = max(_length, (int)offset + written);
+    _length = max(_length, offset + written);
     _dirty = true;
 
     return written;
@@ -46,7 +46,7 @@ int LocalGridFile::write(const char *buf, size_t nbyte, off_t offset)
 int LocalGridFile::read(char* buf, size_t size, off_t offset)
 {
     size_t len = 0;
-    int chunk_num = offset / _chunkSize;
+    size_t chunk_num = offset / _chunkSize;
 
     while(len < size && chunk_num < _chunks.size()) {
         const char* chunk = _chunks[chunk_num];
