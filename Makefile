@@ -21,9 +21,13 @@ install: mount_gridfs
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-operations.o : operations.cpp operations.h
+main.o: main.cpp operations.h options.h utils.h
 
-local_gridfile.o : local_gridfile.cpp local_gridfile.h
+operations.o : operations.cpp operations.h options.h utils.h local_gridfile.h
+
+options.o: options.cpp options.h
+
+local_gridfile.o: local_gridfile.cpp local_gridfile.h
 
 clean:
 	rm -f $(OBJS)
