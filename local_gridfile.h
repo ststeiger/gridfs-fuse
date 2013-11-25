@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstring>
 #include <iostream>
+#include <memory>
 
 #ifdef __linux__
   #include "sys/types.h"
