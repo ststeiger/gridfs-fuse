@@ -28,6 +28,9 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   if (strcmp(path, "/") == 0) {
     stbuf->st_mode = S_IFDIR | 0777;
     stbuf->st_nlink = 2;
+    fuse_context *context = fuse_get_context();
+    stbuf->st_uid = context->uid;
+    stbuf->st_gid = context->gid;
     return 0;
   }
 
@@ -46,18 +49,6 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
     return 0;
   }
 
-  // HACK: This is a protective measure to ensure we don't spin off into forever if a path without a period is requested.
-  if (path_depth(path) > 10)
-    return -ENOENT;
-
-  // HACK: Assumes that if the last part of the path has a '.' in it, it's the leaf of the path, and if we haven't found a match by now,
-  // give up and go home. This works just dandy as long as you avoid putting periods in your 'directory' names.
-  /*if (!is_leaf(path)) {
-    stbuf->st_mode = S_IFDIR | 0777;
-    stbuf->st_nlink = 2;
-    return 0;
-  }*/
-
   auto sdc = make_ScopedDbConnection();
   mongo::BSONObj file_obj = sdc->conn().findOne(db_name() + ".files",
 						BSON("filename" << path));
@@ -65,19 +56,20 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   if (file_obj.isEmpty())
     return -ENOENT;
 
-  stbuf->st_mode = S_IFREG | (file_obj["mode"].Int() & (0xffff ^ S_IFMT));
-  stbuf->st_nlink = 1;
-  if (!file_obj["owner"].eoo()) {
+  stbuf->st_mode = file_obj["mode"].Int();
+  stbuf->st_nlink = S_ISREG(stbuf->st_mode) ? 1 : 2;
+  if (file_obj.hasField("owner")) {
     passwd *pw = getpwnam(file_obj["owner"].str().c_str());
     if (pw)
       stbuf->st_uid = pw->pw_uid;
   }
-  if (!file_obj["group"].eoo()) {
+  if (file_obj.hasField("group")) {
     group *gr = getgrnam(file_obj["group"].str().c_str());
     if (gr)
       stbuf->st_gid = gr->gr_gid;
   }
-  stbuf->st_size = file_obj["length"].Int();
+  if (file_obj.hasField("length"))
+    stbuf->st_size = file_obj["length"].Int();
 
   time_t upload_time = mongo_time_to_unix_time(file_obj["uploadDate"].date());
   stbuf->st_ctime = upload_time;
