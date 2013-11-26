@@ -26,7 +26,14 @@
 #define ENOATTR 93
 #endif
 
+#include <map>
 #include <fuse.h>
+#include <mongo/client/connpool.h>
+
+#include "local_gridfile.h"
+#include "options.h"
+
+extern std::map<std::string, LocalGridFile::ptr> open_files;
 
 int gridfs_getattr(const char *path, struct stat *stbuf);
 
@@ -65,5 +72,11 @@ int gridfs_write(const char* path, const char* buf, size_t nbyte,
 int gridfs_flush(const char* path, struct fuse_file_info* ffi);
 
 int gridfs_rename(const char* old_path, const char* new_path);
+
+std::shared_ptr<mongo::ScopedDbConnection> make_ScopedDbConnection(void);
+
+inline mongo::GridFS get_gridfs(std::shared_ptr<mongo::ScopedDbConnection> sdc) {
+  return mongo::GridFS(sdc->conn(), gridfs_options.db, gridfs_options.prefix);
+}
 
 #endif

@@ -18,6 +18,7 @@
 #ifndef __OPTIONS_H
 #define __OPTIONS_H
 
+#include <string>
 #include <fuse/fuse_opt.h>
 #include <mongo/client/dbclient.h>
 #include <cstddef>
@@ -25,7 +26,7 @@
 struct gridfs_options {
   const char* host;
   int port;
-  mongo::ConnectionString* conn_string;
+  mongo::ConnectionString *conn_string;
   const char* db;
   const char* prefix;
   const char* username;
@@ -47,4 +48,7 @@ int gridfs_opt_proc(void* data, const char* arg, int key,
           struct fuse_args* outargs);
 
 void print_help();
+
+inline std::string db_name() { return std::string(gridfs_options.db) + "." + gridfs_options.prefix; }
+
 #endif

@@ -22,8 +22,7 @@ using namespace std;
 
 struct gridfs_options gridfs_options;
 
-struct fuse_opt gridfs_opts[] =
-{
+struct fuse_opt gridfs_opts[] = {
   GRIDFS_OPT_KEY("--host=%s", host, 0),
   GRIDFS_OPT_KEY("--port=%d", port, 0),
   GRIDFS_OPT_KEY("--db=%s", db, 0),
@@ -37,15 +36,13 @@ struct fuse_opt gridfs_opts[] =
   NULL
 };
 
-int gridfs_opt_proc(void* data, const char* arg, int key,
-          struct fuse_args* outargs)
-{
-  if(key == KEY_HELP) {
+int gridfs_opt_proc(void* data, const char* arg, int key, struct fuse_args* outargs) {
+  if (key == KEY_HELP) {
     print_help();
     return -1;
   }
 
-  if(key == KEY_VERSION) {
+  if (key == KEY_VERSION) {
     cout << "gridfs-fuse version 0.3" << endl;
     return -1;
   }
@@ -53,8 +50,7 @@ int gridfs_opt_proc(void* data, const char* arg, int key,
   return 1;
 }
 
-void print_help()
-{
+void print_help() {
   cout << "usage: ./mount_gridfs [options] mountpoint" << endl;
   cout << endl << "general options:" << endl;
   cout << "\t--host=[hostname]\thostname of your mongodb server" << endl;
