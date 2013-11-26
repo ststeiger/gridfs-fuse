@@ -45,9 +45,3 @@ std::shared_ptr<mongo::ScopedDbConnection> make_ScopedDbConnection(void) {
 
   return std::shared_ptr<mongo::ScopedDbConnection>(sdc, SDC_deleter());
 }
-
-int gridfs_mknod(const char *path, mode_t mode, dev_t rdev) {
-  // POSIX TODO
-  fprintf(stderr, "MKNOD: %s\n", path); 
-  return 0;
-}
