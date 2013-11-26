@@ -109,7 +109,6 @@ int gridfs_setxattr(const char* path, const char* name, const char* value, size_
     return -ENOATTR;
 
   auto sdc = make_ScopedDbConnection();
-  mongo::GridFS gf = get_gridfs(sdc);
   mongo::DBClientBase &client = sdc->conn();
 
   mongo::BSONObj file_obj = client.findOne(db_name() + ".files",
@@ -140,7 +139,6 @@ int gridfs_removexattr(const char* path, const char* name) {
     return -ENOATTR;
 
   auto sdc = make_ScopedDbConnection();
-  mongo::GridFS gf = get_gridfs(sdc);
   mongo::DBClientBase &client = sdc->conn();
 
   mongo::BSONObj file_obj = client.findOne(db_name() + ".files",
