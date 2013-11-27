@@ -155,7 +155,7 @@ int gridfs_flush(const char* path, struct fuse_file_info *ffi) {
   char *buf = new char[len];
   lgf->read(buf, len, 0);
 
-  mongo::BSONObj file_obj = gf.storeFile(buf, len, path);
+  gf.storeFile(buf, len, path);
 
   mongo::BSONObjBuilder b;
   {
