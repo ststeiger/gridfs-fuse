@@ -100,6 +100,8 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
   }
   if (S_ISDIR(stbuf->st_mode))
     stbuf->st_nlink = 2 + subdir_count(client, path);
+  if (S_ISLNK(stbuf->st_mode))
+    stbuf->st_size = file_obj["target"].String().length();
 
   time_t upload_time = mongo_time_to_unix_time(file_obj["uploadDate"].date());
   stbuf->st_ctime = upload_time;

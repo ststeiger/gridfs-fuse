@@ -37,11 +37,15 @@ extern std::map<std::string, LocalGridFile::ptr> open_files;
 
 int gridfs_getattr(const char* path, struct stat *stbuf);
 
+int gridfs_readlink(const char* path, char* buf, size_t size);
+
 int gridfs_mkdir(const char* path, mode_t mode);
 
 int gridfs_unlink(const char* path);
 
 int gridfs_rmdir(const char* path);
+
+int gridfs_symlink(const char* target, const char* path);
 
 int gridfs_rename(const char* old_path, const char* new_path);
 
