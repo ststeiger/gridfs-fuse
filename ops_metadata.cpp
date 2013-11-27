@@ -22,8 +22,34 @@
 #include "options.h"
 #include "utils.h"
 
+unsigned int subdir_count(mongo::DBClientBase &client, std::string path) {
+  mongo::BSONObj proj = BSON("mode" << 1);
+  std::string path_start = path;
+  if (path.length() > 0)
+    path_start += "/";
+
+  std::unique_ptr<mongo::DBClientCursor> cursor = client.query(db_name() + ".files",
+							       BSON("filename" <<
+								    BSON("$regex" << ("^" + path_start + "/[^/]*$"))
+								    ),
+							       0, 0,
+							       &proj);
+  std::string lastFN;
+  unsigned int count = 0;
+  while (cursor->more()) {
+    mongo::BSONObj file_obj = cursor->next();
+    if (S_ISDIR(file_obj["mode"].Int()))
+      count++;
+  }
+
+  return count;
+}
+
 int gridfs_getattr(const char *path, struct stat *stbuf) {
   memset(stbuf, 0, sizeof(struct stat));
+
+  auto sdc = make_ScopedDbConnection();
+  mongo::DBClientBase &client = sdc->conn();
 
   if (strcmp(path, "/") == 0) {
     stbuf->st_mode = S_IFDIR | 0777;
@@ -49,15 +75,12 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
     return 0;
   }
 
-  auto sdc = make_ScopedDbConnection();
-  mongo::BSONObj file_obj = sdc->conn().findOne(db_name() + ".files",
-						BSON("filename" << path));
+  mongo::BSONObj file_obj = client.findOne(db_name() + ".files",
+					   BSON("filename" << path));
 
   if (file_obj.isEmpty())
     return -ENOENT;
 
-  stbuf->st_mode = file_obj["mode"].Int();
-  stbuf->st_nlink = S_ISREG(stbuf->st_mode) ? 1 : 2;
   if (file_obj.hasField("owner")) {
     passwd *pw = getpwnam(file_obj["owner"].str().c_str());
     if (pw)
@@ -68,8 +91,15 @@ int gridfs_getattr(const char *path, struct stat *stbuf) {
     if (gr)
       stbuf->st_gid = gr->gr_gid;
   }
-  if (file_obj.hasField("length"))
+
+  stbuf->st_mode = file_obj["mode"].Int();
+  if (S_ISREG(stbuf->st_mode)) {
+    stbuf->st_nlink = 1;
     stbuf->st_size = file_obj["length"].Int();
+    stbuf->st_blocks = stbuf->st_size >> 9;
+  }
+  if (S_ISDIR(stbuf->st_mode))
+    stbuf->st_nlink = 2 + subdir_count(client, path);
 
   time_t upload_time = mongo_time_to_unix_time(file_obj["uploadDate"].date());
   stbuf->st_ctime = upload_time;
