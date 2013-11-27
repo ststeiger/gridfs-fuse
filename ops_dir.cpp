@@ -88,17 +88,17 @@ int gridfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t of
 								    &proj);
   std::string lastFN;
   while (cursor->more()) {
-    std::string f = cursor->next().getField("filename").String();
-    std::string rel = f.substr(path_start.length());
+    std::string filename = cursor->next()["filename"].String();
+    std::string rel = filename.substr(path_start.length());
     if (rel.find("/") != std::string::npos)
       continue;
 
     /* If this filename matches the last filename we've seen, *do not* add it to the buffer because it's a duplicate filename */ 
-    if (lastFN != f)
-      filler(buf, rel.c_str() , NULL , 0);
+    if (lastFN != filename)
+      filler(buf, rel.c_str(), NULL, 0);
 
     /* Update lastFN with our cursor's current filename */
-    lastFN = f;
+    lastFN = filename;
     fprintf(stderr, "DEBUG: %s\n", lastFN.c_str());
   }
 
