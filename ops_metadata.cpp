@@ -188,21 +188,9 @@ int gridfs_rename(const char* old_path, const char* new_path) {
   if (file_obj.isEmpty())
     return -ENOENT;
 
-  mongo::BSONObjBuilder b;
-  std::set<std::string> field_names;
-  file_obj.getFieldNames(field_names);
-
-  for (auto name : field_names) {
-    if (name != "filename") {
-      b.append(file_obj.getField(name));
-    }
-  }
-
-  b << "filename" << new_path;
-
   client.update(db_name() + ".files",
 		BSON("_id" << file_obj.getField("_id")),
-		b.obj());
+		BSON("$set" << BSON("filename" << new_path)));
 
   return 0;
 }
